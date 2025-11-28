@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: rapid-photo-flow-postgres
+    environment:
+      POSTGRES_DB: photodb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rapid-photo-flow-network
+
+  # Redis for Streams/Queue
+  redis:
+    image: redis:7-alpine
+    container_name: rapid-photo-flow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rapid-photo-flow-network
+
+  # Redis Web UI (like MinIO console)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: rapid-photo-flow-redis-ui
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - rapid-photo-flow-network
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    container_name: rapid-photo-flow-minio
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports:
+      - "9000:9000"  # API port
+      - "9001:9001"  # Console port
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - rapid-photo-flow-network
+
+  # MinIO Client - Creates buckets on startup
+  minio-setup:
+    image: minio/mc:latest
+    container_name: rapid-photo-flow-minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 minio minio123;
+      mc mb myminio/photos --ignore-existing;
+      mc mb myminio/thumbnails --ignore-existing;
+      mc anonymous set download myminio/photos;
+      mc anonymous set download myminio/thumbnails;
+      echo 'MinIO buckets created successfully';
+      "
+    networks:
+      - rapid-photo-flow-network
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local
+
+networks:
+  rapid-photo-flow-network:
+    driver: bridge
+

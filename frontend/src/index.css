@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Smooth dock animations - transitions handled inline for better control */
+.dock-item {
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+/* Glass morphism effect */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Custom dropdown option styling - dark purple theme matching navigation */
+select {
+  color-scheme: light;
+}
+
+select option {
+  background-color: white !important;
+  color: #374151 !important;
+  padding: 0.75rem 1rem !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+}
+
+/* Hover state - dark purple like navigation */
+select option:hover,
+select option:focus,
+select option:active {
+  background: linear-gradient(to right, #9333ea, #7e22ce) !important;
+  background-color: #9333ea !important;
+  color: white !important;
+}
+
+/* Selected/checked state - light purple */
+select option:checked {
+  background: linear-gradient(to right, #f3e8ff, #e9d5ff) !important;
+  background-color: #f3e8ff !important;
+  color: #7c3aed !important;
+}
+
+/* For Firefox - selected state */
+select option:-moz-selected {
+  background-color: #f3e8ff !important;
+  color: #7c3aed !important;
+}
+
+/* Additional styling for better appearance - selected state */
+select:focus option:checked {
+  background: linear-gradient(to right, #f3e8ff, #e9d5ff) !important;
+  background-color: #f3e8ff !important;
+  color: #7c3aed !important;
+}
+

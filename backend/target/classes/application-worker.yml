@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: imagestream-worker
+  
+  # Allow bean definition overriding (needed when running both API and Worker)
+  main:
+    allow-bean-definition-overriding: true
+    web-application-type: none
+  
+  # Database Configuration (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/photodb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 50  # Support 40 concurrent threads + API connections
+      minimum-idle: 10
+      connection-timeout: 30000
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false  # Less verbose in worker
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  
+# Application mode (enables WorkerApplication and StreamConsumer)
+app:
+  mode: worker
+
+# MinIO/S3 Configuration (for future use if worker needs to access storage)
+minio:
+  endpoint: http://localhost:9000
+  access-key: minio
+  secret-key: minio123
+  bucket-photos: photos
+  bucket-thumbnails: thumbnails
+
+# Redis Stream Configuration
+redis:
+  stream:
+    name: photo_stream
+    consumer-group: workers
+    consumer-name: worker-1
+
+# Logging
+logging:
+  level:
+    com.rapidphotoflow: INFO
+    com.rapidphotoflow.worker: DEBUG
+    org.springframework: WARN
+

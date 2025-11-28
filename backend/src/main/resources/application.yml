@@ -1,0 +1,77 @@
+spring:
+  application:
+    name: imagestream
+  
+  # Allow bean definition overriding (needed when running both API and Worker)
+  main:
+    allow-bean-definition-overriding: true
+  
+  # Database Configuration (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://localhost:5432/photodb
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 50  # Support 40 concurrent threads + API connections
+      minimum-idle: 10
+      connection-timeout: 30000
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update  # Auto-create/update tables
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  
+  # File Upload Configuration
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 5GB  # Allow up to 1000 files (1000 × 10MB max per file)
+
+# MinIO/S3 Configuration
+minio:
+  endpoint: http://localhost:9000
+  access-key: minio
+  secret-key: minio123
+  bucket-photos: photos
+  bucket-thumbnails: thumbnails
+
+# Redis Stream Configuration
+redis:
+  stream:
+    name: photo_stream
+    consumer-group: workers
+    consumer-name: worker-1
+
+# Server Configuration
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# Logging
+logging:
+  level:
+    com.rapidphotoflow: DEBUG
+    org.springframework.web: INFO
+    org.hibernate: INFO
+
