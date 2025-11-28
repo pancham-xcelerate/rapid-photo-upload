@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { StatusBadge } from './StatusBadge';
 import { photoAPI } from '../services/api';
 
-export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onFavoriteToggle, onRename, loading = false, viewType = 'grid' }) {
+export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onFavoriteToggle, onRename, loading = false, viewType = 'grid', isTrash = false, onRestore, onBulkRestore }) {
   const [openMenu, setOpenMenu] = useState(null); // Track which photo's three-dots menu is open
   const [selectionMode, setSelectionMode] = useState(false); // Track selection mode
   const [selectedPhotos, setSelectedPhotos] = useState(new Set()); // Track selected photo IDs
@@ -46,7 +46,7 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
     }
   }, [openMenu]);
 
-  // Detect dropdown position when menu opens (for list view)
+  // Detect dropdown position when menu opens (for both list and grid views)
   const calculateDropdownPosition = (photoId) => {
     const buttonRef = menuRefs.current[photoId];
     if (buttonRef) {
@@ -65,7 +65,7 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
   };
 
   useEffect(() => {
-    if (openMenu && viewType === 'list') {
+    if (openMenu) {
       calculateDropdownPosition(openMenu);
       
       // Recalculate on window resize
@@ -189,12 +189,27 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
   const handleBulkDelete = async () => {
     if (selectedPhotos.size === 0) return;
     
-    if (!window.confirm(`Are you sure you want to delete ${selectedPhotos.size} photo(s)?`)) {
-      return;
+    // Only show confirm dialog in normal mode (not trash mode)
+    // Trash page handles its own confirmation
+    if (!isTrash) {
+      const confirmMessage = `Are you sure you want to delete ${selectedPhotos.size} photo(s)?`;
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
     }
 
     if (onBulkDelete) {
       await onBulkDelete(Array.from(selectedPhotos));
+      setSelectedPhotos(new Set());
+      setSelectionMode(false);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedPhotos.size === 0) return;
+    
+    if (onBulkRestore) {
+      await onBulkRestore(Array.from(selectedPhotos));
       setSelectedPhotos(new Set());
       setSelectionMode(false);
     }
@@ -326,44 +341,73 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={exitSelectionMode}
-              className="px-5 py-2.5 text-sm font-medium border-2 border-gray-300 rounded-lg hover:bg-white hover:border-gray-400 transition-all duration-200 shadow-sm hover:shadow-md"
-            >
-              Cancel
-            </button>
-            
-            {/* Bulk Download */}
-            <button
-              onClick={handleBulkDownload}
-              disabled={selectedPhotos.size === 0 || isDownloading}
-              className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-            >
-              {isDownloading ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Downloading...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download ({selectedPhotos.size})
-                </>
-              )}
-            </button>
-            
-            <button
-              onClick={handleBulkDelete}
-              disabled={selectedPhotos.size === 0 || isDownloading}
-              className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-            >
-              Delete Selected ({selectedPhotos.size})
-            </button>
+            {isTrash ? (
+              <>
+                {/* Trash mode: Only Restore and Permanently Delete */}
+                {onBulkRestore && (
+                  <button
+                    onClick={handleBulkRestore}
+                    disabled={selectedPhotos.size === 0}
+                    className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Restore Selected
+                  </button>
+                )}
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={selectedPhotos.size === 0}
+                  className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Permanently Delete
+                </button>
+                <button
+                  onClick={exitSelectionMode}
+                  className="px-5 py-2.5 text-sm font-medium border-2 border-gray-300 rounded-lg hover:bg-white hover:border-gray-400 transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Normal mode: Delete, Download, Cancel */}
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-purple-500 to-blue-600 text-white rounded-lg hover:from-purple-600 hover:to-blue-700 transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  Delete Selected
+                </button>
+                <button
+                  onClick={exitSelectionMode}
+                  className="px-5 py-2.5 text-sm font-medium border-2 border-gray-300 rounded-lg hover:bg-white hover:border-gray-400 transition-all duration-200 shadow-sm hover:shadow-md"
+                >
+                  Cancel
+                </button>
+                
+                {/* Bulk Download */}
+                <button
+                  onClick={handleBulkDownload}
+                  disabled={selectedPhotos.size === 0 || isDownloading}
+                  className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                >
+                  {isDownloading ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Download ({selectedPhotos.size})
+                    </>
+                  )}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -385,8 +429,8 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
 
       <div className={
         viewType === 'list' 
-          ? 'space-y-3' 
-          : 'grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6'
+          ? 'space-y-3 relative' 
+          : 'grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 relative'
       }>
       {photos.map((photo) => {
         const isSelected = selectedPhotos.has(photo.id);
@@ -531,7 +575,7 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
             </div>
           </div>
 
-          {/* Three-dots menu dropdown for grid view - positioned to the right of the button */}
+          {/* Three-dots menu dropdown for grid view - auto-positioned based on available space */}
           {!selectionMode && viewType !== 'list' && openMenu === photo.id && (
             <div 
               ref={(el) => (dropdownRefs.current[photo.id] = el)}
@@ -539,71 +583,115 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
               style={{ zIndex: 10002 }}
             >
               <div 
-                className="absolute top-0 left-full ml-3 bg-white rounded-xl shadow-2xl border border-gray-200/50 w-auto min-w-[160px] max-w-[220px] sm:min-w-[180px] sm:max-w-[240px] overflow-hidden backdrop-blur-sm"
+                className={`absolute top-0 bg-white rounded-xl shadow-2xl border border-gray-200/50 w-auto min-w-[160px] max-w-[220px] sm:min-w-[180px] sm:max-w-[240px] overflow-hidden backdrop-blur-sm ${
+                  dropdownPosition[photo.id] === 'left' 
+                    ? 'right-full mr-3' 
+                    : 'left-full ml-3'
+                }`}
                 style={{ zIndex: 10003 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
                 }}
               >
-                {/* Rename option */}
-                <button
-                  onClick={(e) => handleRenameClick(photo, e)}
-                  className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 font-medium"
-                >
-                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <span className="truncate">Rename</span>
-                </button>
+                {isTrash ? (
+                  <>
+                    {/* Restore option (for trash) */}
+                    {onRestore && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenu(null);
+                          onRestore(photo.id);
+                        }}
+                        className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-green-600 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 font-medium"
+                      >
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span className="truncate">Restore</span>
+                      </button>
+                    )}
 
-                {/* Share option */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    handleShare(photo);
-                  }}
-                  className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
-                >
-                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                  </svg>
-                  <span className="truncate">Share Link</span>
-                </button>
+                    {/* Permanently Delete option (for trash) */}
+                    {onDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenu(null);
+                          onDelete(photo.id);
+                        }}
+                        className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-700 transition-all duration-200 border-t border-gray-100 flex items-center gap-2 sm:gap-3 font-medium"
+                      >
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span className="truncate">Permanently Delete</span>
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Rename option */}
+                    <button
+                      onClick={(e) => handleRenameClick(photo, e)}
+                      className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 font-medium"
+                    >
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <span className="truncate">Rename</span>
+                    </button>
 
-                {/* Download option */}
-                {photo.originalUrl && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      handleDownload(photo);
-                    }}
-                    className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
-                  >
-                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    <span className="truncate">Download</span>
-                  </button>
-                )}
+                    {/* Share option */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        handleShare(photo);
+                      }}
+                      className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
+                    >
+                      <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                      </svg>
+                      <span className="truncate">Share Link</span>
+                    </button>
 
-                {/* Delete option */}
-                {onDelete && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpenMenu(null);
-                      onDelete(photo.id);
-                    }}
-                    className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-700 transition-all duration-200 border-t border-gray-100 flex items-center gap-2 sm:gap-3 font-medium"
-                  >
-                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    <span className="truncate">Delete</span>
-                  </button>
+                    {/* Download option */}
+                    {photo.originalUrl && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleDownload(photo);
+                        }}
+                        className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
+                      >
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span className="truncate">Download</span>
+                      </button>
+                    )}
+
+                    {/* Delete option */}
+                    {onDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenu(null);
+                          onDelete(photo.id);
+                        }}
+                        className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-700 transition-all duration-200 border-t border-gray-100 flex items-center gap-2 sm:gap-3 font-medium"
+                      >
+                        <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span className="truncate">Delete</span>
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -612,12 +700,14 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
           {/* Photo name at bottom */}
           <div className={`flex-shrink-0 bg-gradient-to-b from-white to-gray-50 relative ${
             viewType === 'list' 
-              ? 'flex-1 p-4 overflow-hidden' 
+              ? 'flex-1 p-4 overflow-visible' 
               : 'p-4 rounded-b-xl overflow-hidden'
           }`}>
             {renamingPhoto === photo.id ? (
               <div 
-                className="flex items-center gap-1 rename-container w-full"
+                className={`flex items-center gap-1 rename-container ${
+                  viewType === 'list' ? 'w-auto max-w-md' : 'w-full'
+                }`}
                 onClick={(e) => e.stopPropagation()}
               >
                 <input
@@ -644,7 +734,9 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex-1 min-w-0 px-3 py-2 text-sm border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200"
+                  className={`px-3 py-2 text-sm border-2 border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 ${
+                    viewType === 'list' ? 'w-auto min-w-[200px] max-w-md' : 'flex-1 min-w-0'
+                  }`}
                   autoFocus
                   placeholder="Enter new filename"
                 />
@@ -661,13 +753,13 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
             )}
             {viewType === 'list' && (
               <div className="mt-1 flex items-center gap-2">
-                <StatusBadge status={photo.status} />
+                <StatusBadge status={photo.status} className="w-auto" />
               </div>
             )}
             
             {/* Heart icon and Three-dots menu - right side (only for list view) */}
             {!selectionMode && viewType === 'list' && (
-              <div className="absolute top-1/2 right-2 sm:right-3 transform -translate-y-1/2 z-30 flex items-center gap-2">
+              <div className="absolute top-1/2 right-2 sm:right-3 transform -translate-y-1/2 z-30 flex items-center gap-2 overflow-visible">
                 {/* Heart icon for favorites - list view */}
                 <button
                   onClick={(e) => handleFavoriteToggle(photo, e)}
@@ -687,7 +779,7 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
                 </button>
                 
                 {/* Three-dots menu button */}
-                <div className="menu-container" ref={(el) => (menuRefs.current[photo.id] = el)}>
+                <div className="menu-container relative" ref={(el) => (menuRefs.current[photo.id] = el)}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -711,71 +803,111 @@ export function PhotoGallery({ photos, onPhotoClick, onDelete, onBulkDelete, onF
                         ? 'right-full mr-3' 
                         : 'left-full ml-3'
                     }`}
-                    style={{ zIndex: 10004 }}
+                    style={{ zIndex: 10005 }}
                     onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
                     }}
                   >
 
-                    {/* Rename option */}
-                    <button
-                      onClick={(e) => handleRenameClick(photo, e)}
-                      className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 font-medium"
-                    >
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                      <span className="truncate">Rename</span>
-                    </button>
+                    {isTrash ? (
+                      <>
+                        {/* Restore option (for trash) */}
+                        {onRestore && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenu(null);
+                              onRestore(photo.id);
+                            }}
+                            className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-green-600 hover:bg-gradient-to-r hover:from-green-50 hover:to-emerald-50 hover:text-green-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 font-medium"
+                          >
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span className="truncate">Restore</span>
+                          </button>
+                        )}
 
-                    {/* Share option */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        handleShare(photo);
-                      }}
-                      className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
-                    >
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                      </svg>
-                      <span className="truncate">Share Link</span>
-                    </button>
+                        {/* Permanently Delete option (for trash) */}
+                        {onDelete && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenu(null);
+                              onDelete(photo.id);
+                            }}
+                            className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-700 transition-all duration-200 border-t border-gray-100 font-medium flex items-center gap-2 sm:gap-3"
+                          >
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span className="truncate">Permanently Delete</span>
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {/* Rename option */}
+                        <button
+                          onClick={(e) => handleRenameClick(photo, e)}
+                          className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 font-medium"
+                        >
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                          <span className="truncate">Rename</span>
+                        </button>
 
-                    {/* Download option */}
-                    {photo.originalUrl && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          handleDownload(photo);
-                        }}
-                        className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
-                      >
-                        <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        <span className="truncate">Download</span>
-                      </button>
-                    )}
+                        {/* Share option */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleShare(photo);
+                          }}
+                          className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
+                        >
+                          <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                          </svg>
+                          <span className="truncate">Share Link</span>
+                        </button>
 
-                    {/* Delete option */}
-                    {onDelete && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setOpenMenu(null);
-                          onDelete(photo.id);
-                        }}
-                        className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-700 transition-all duration-200 border-t border-gray-100 font-medium flex items-center gap-2 sm:gap-3"
-                      >
-                        <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        <span className="truncate">Delete</span>
-                      </button>
+                        {/* Download option */}
+                        {photo.originalUrl && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handleDownload(photo);
+                            }}
+                            className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-gray-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:text-purple-700 transition-all duration-200 flex items-center gap-2 sm:gap-3 border-t border-gray-100 font-medium"
+                          >
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span className="truncate">Download</span>
+                          </button>
+                        )}
+
+                        {/* Delete option */}
+                        {onDelete && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenu(null);
+                              onDelete(photo.id);
+                            }}
+                            className="w-full text-left px-4 py-2.5 sm:px-5 sm:py-3 text-sm sm:text-base text-red-600 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-700 transition-all duration-200 border-t border-gray-100 font-medium flex items-center gap-2 sm:gap-3"
+                          >
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            <span className="truncate">Delete</span>
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

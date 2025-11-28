@@ -57,5 +57,35 @@ public interface PhotoRepository extends JpaRepository<Photo, UUID> {
      * Find favorite photos with status filter
      */
     Page<Photo> findByIsFavoriteTrueAndStatus(PhotoStatus status, Pageable pageable);
+    
+    /**
+     * Find all non-deleted photos (deletedAt is null)
+     */
+    @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NULL")
+    Page<Photo> findAllNotDeleted(Pageable pageable);
+    
+    /**
+     * Find all deleted photos (deletedAt is not null)
+     */
+    @Query("SELECT p FROM Photo p WHERE p.deletedAt IS NOT NULL")
+    Page<Photo> findAllDeleted(Pageable pageable);
+    
+    /**
+     * Find non-deleted photos by status
+     */
+    @Query("SELECT p FROM Photo p WHERE p.status = :status AND p.deletedAt IS NULL")
+    Page<Photo> findByStatusAndNotDeleted(@Param("status") PhotoStatus status, Pageable pageable);
+    
+    /**
+     * Find non-deleted favorite photos
+     */
+    @Query("SELECT p FROM Photo p WHERE p.isFavorite = true AND p.deletedAt IS NULL")
+    Page<Photo> findFavoritePhotosNotDeleted(Pageable pageable);
+    
+    /**
+     * Find non-deleted favorite photos with status filter
+     */
+    @Query("SELECT p FROM Photo p WHERE p.isFavorite = true AND p.status = :status AND p.deletedAt IS NULL")
+    Page<Photo> findFavoritePhotosNotDeletedAndStatus(@Param("status") PhotoStatus status, Pageable pageable);
 }
 

@@ -64,8 +64,8 @@ api.interceptors.response.use(
 
 // Photo API methods
 export const photoAPI = {
-  // Upload photos with progress tracking
-  uploadPhotos: async (files, onUploadProgress) => {
+  // Upload photos
+  uploadPhotos: async (files) => {
     const formData = new FormData();
     files.forEach((file) => {
       formData.append('files', file);
@@ -74,16 +74,6 @@ export const photoAPI = {
     const response = await api.post('/photos', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (onUploadProgress && progressEvent.total) {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          onUploadProgress({
-            loaded: progressEvent.loaded,
-            total: progressEvent.total,
-            percent: percentCompleted,
-          });
-        }
       },
     });
     return response.data;
@@ -152,6 +142,33 @@ export const photoAPI = {
   renamePhoto: async (id, newFilename) => {
     const response = await api.put(`/photos/${id}/rename`, { filename: newFilename });
     return response.data;
+  },
+  
+  // Get trash photos
+  getTrashPhotos: async (params = {}) => {
+    const response = await api.get('/photos/trash', { params });
+    return response.data;
+  },
+  
+  // Restore photo from trash
+  restorePhoto: async (id) => {
+    const response = await api.post(`/photos/${id}/restore`);
+    return response.data;
+  },
+  
+  // Restore multiple photos from trash
+  restorePhotos: async (ids) => {
+    await api.post('/photos/bulk-restore', ids);
+  },
+  
+  // Permanently delete photo from trash
+  permanentDeletePhoto: async (id) => {
+    await api.delete(`/photos/${id}/permanent`);
+  },
+  
+  // Permanently delete multiple photos from trash
+  permanentDeletePhotos: async (ids) => {
+    await api.post('/photos/bulk-permanent-delete', ids);
   },
 };
 

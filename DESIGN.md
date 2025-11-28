@@ -49,6 +49,8 @@ Every step is saved in `event_log` table:
 | PROCESSING     | worker picked and is working     |
 | COMPLETED      | worker finished processing       |
 | FAILED         | processing failed (with error message) |
+| RENAMED        | photo filename was changed       |
+| RESTORED       | photo restored from trash        |
 
 This gives **full traceability**.
 
@@ -87,7 +89,32 @@ These run independently and scale independently.
 - **Pending Message Retry**: Every 30 seconds for failed messages
 - **Database Connection Pool**: HikariCP configured with 50 connections to support 40 worker threads + API connections
 
-### ✔ 6. Cloud-ready + Local-ready  
+### ✔ 6. Trash & Soft Delete
+
+**Soft Delete Functionality:**
+- Photos are not immediately deleted from the database
+- Deleted photos are moved to trash with `deletedAt` timestamp
+- Photos in trash can be restored to their original location
+- Permanent deletion removes photos from both database and storage
+- Trash page displays all deleted photos with restore/permanent delete options
+
+**Trash Management:**
+- View all deleted photos in dedicated Trash page
+- Restore individual or multiple photos
+- Permanently delete photos (cannot be undone)
+- Bulk operations for restore and permanent delete
+- Photos in trash are excluded from normal photo listings
+
+### ✔ 7. Favorites
+
+**Favorite Photos:**
+- Mark photos as favorites using heart icon
+- Dedicated Favorites page to view all favorite photos
+- Filter favorites by status
+- Toggle favorite status from any photo view
+- Favorites are preserved even after deletion (until permanent delete)
+
+### ✔ 8. Cloud-ready + Local-ready  
 
 Local development uses:
 
@@ -193,6 +220,12 @@ rapid-photo-flow/
 │  │  ├─ ProcessingQueue.jsx
 
 │  │  ├─ ReviewPhotos.jsx
+
+│  │  ├─ Favorites.jsx
+
+│  │  ├─ Trash.jsx
+
+│  │  ├─ PhotoDetail.jsx
 
 │  │  └─ EventLogViewer.jsx
 
@@ -561,7 +594,7 @@ Response: 200 OK
 }
 ```
 
-#### Delete Photo
+#### Delete Photo (Soft Delete - Move to Trash)
 ```
 DELETE /api/photos/{id}
 
@@ -574,7 +607,7 @@ Not Found: 404
 }
 ```
 
-#### Bulk Delete Photos
+#### Bulk Delete Photos (Soft Delete - Move to Trash)
 ```
 POST /api/photos/bulk-delete
 Content-Type: application/json
@@ -585,6 +618,151 @@ Request:
 Response: 204 No Content
 
 Bad Request: 400 (if empty array)
+```
+
+#### Get Trash Photos
+```
+GET /api/photos/trash?page=0&size=25&sort=deletedAt,desc
+
+Query Parameters:
+- page (optional): Page number (default: 0)
+- size (optional): Page size (default: 25)
+- sort (optional): Sort field and direction (default: deletedAt,desc)
+
+Response: 200 OK
+{
+  "content": [
+    {
+      "id": "uuid",
+      "filename": "photo.jpg",
+      "status": "COMPLETED",
+      "deletedAt": "2025-11-XX...",
+      "uploadedAt": "2025-11-XX...",
+      "size": 1024000,
+      "thumbnailUrl": "http://localhost:9000/thumbnails/photo_thumb.jpg",
+      "originalUrl": "http://localhost:9000/photos/photo.jpg"
+    }
+  ],
+  "totalElements": 10,
+  "totalPages": 1,
+  "page": 0,
+  "size": 25
+}
+```
+
+#### Restore Photo from Trash
+```
+POST /api/photos/{id}/restore
+
+Response: 200 OK
+{
+  "id": "uuid",
+  "filename": "photo.jpg",
+  "status": "COMPLETED",
+  "deletedAt": null,
+  ...
+}
+
+Not Found: 404
+{
+  "error": "NOT_FOUND",
+  "message": "Photo with id {id} not found"
+}
+```
+
+#### Bulk Restore Photos
+```
+POST /api/photos/bulk-restore
+Content-Type: application/json
+
+Request:
+["uuid1", "uuid2", "uuid3"]
+
+Response: 204 No Content
+```
+
+#### Permanently Delete Photo
+```
+DELETE /api/photos/{id}/permanent
+
+Response: 204 No Content
+
+Not Found: 404
+{
+  "error": "NOT_FOUND",
+  "message": "Photo with id {id} not found"
+}
+```
+
+#### Bulk Permanently Delete Photos
+```
+POST /api/photos/bulk-permanent-delete
+Content-Type: application/json
+
+Request:
+["uuid1", "uuid2", "uuid3"]
+
+Response: 204 No Content
+```
+
+#### Toggle Favorite Status
+```
+PUT /api/photos/{id}/favorite
+
+Request:
+{
+  "favorite": true
+}
+
+Response: 200 OK
+{
+  "id": "uuid",
+  "favorite": true,
+  ...
+}
+```
+
+#### Get Favorite Photos
+```
+GET /api/photos/favorites?status=COMPLETED&page=0&size=20&sort=uploadedAt,desc
+
+Query Parameters:
+- status (optional): Filter by status
+- page (optional): Page number (default: 0)
+- size (optional): Page size (default: 20)
+- sort (optional): Sort field and direction (default: uploadedAt,desc)
+
+Response: 200 OK
+{
+  "content": [
+    {
+      "id": "uuid",
+      "filename": "photo.jpg",
+      "favorite": true,
+      "status": "COMPLETED",
+      ...
+    }
+  ],
+  "totalElements": 15,
+  "totalPages": 1
+}
+```
+
+#### Rename Photo
+```
+PUT /api/photos/{id}/rename
+
+Request:
+{
+  "filename": "new-name.jpg"
+}
+
+Response: 200 OK
+{
+  "id": "uuid",
+  "filename": "new-name.jpg",
+  ...
+}
 ```
 
 ### Event Log
@@ -709,24 +887,63 @@ Check browser DevTools → Network → WS tab to verify WebSocket connection.
 
 ---
 
+## 🎨 Frontend Screens & UI Design
+
+### UI Theme & Styling
+
+**Consistent Design System:**
+- **Purple Gradient Theme**: Applied across navigation, buttons, and interactive elements
+- **Dropdown Styling**: All `<select>` dropdowns use:
+  - Rounded corners (`rounded-xl`)
+  - Purple gradient backgrounds
+  - Custom SVG arrow icons
+  - Shadow effects
+  - Hover states with dark purple gradient
+  - Selected state with light purple gradient
+  - Custom CSS overrides for browser default blue colors
+- **Status Badges**: 
+  - Compact design with full status word displayed
+  - Smaller text size (`text-[10px]`) for better fit
+  - Color-coded by status
+  - Icon indicators
+  - Half card width in grid view
+- **Empty States**: 
+  - Styled cards with white background, shadows, and borders
+  - Large icons (20x20) in gray
+  - Title and description text
+  - Consistent across all pages
+- **Pagination**: 
+  - Purple-themed buttons with gradient hover effects
+  - Rounded corners and shadows
+  - Disabled states with reduced opacity
+- **Loading Spinners**: 
+  - Purple-themed animated spinners
+  - Consistent size and styling
+- **Dynamic Dropdown Positioning**: 
+  - Three-dots menu opens on right by default
+  - Automatically moves to left if insufficient space on right
+  - Works in both grid and list views
+  - Prevents horizontal scrolling
+
 ## 🎨 Frontend Screens
 
 ### Navigation
 - **Left Sidebar Navigation** (purple gradient theme):
   - Fixed sidebar on left (224px width, ~10% reduced scale)
   - ImageStream logo at top
-  - Navigation items: Upload, Queue, Review, Events
+  - Navigation items: Upload, Queue, Review, Favorites, Trash, Events
   - Active state with purple background
   - Hover effects
   - Copyright footer at bottom
 - **Barlow Font**: Google Fonts integration across entire application
 - All pages use consistent `max-w-7xl` container width
+- **Consistent UI Theme**: All dropdowns use purple gradient theme with custom styling
 
 ### 1. Upload Photos Screen
 - Drag-and-drop file upload area
 - Multiple file selection support (up to 1000 files)
 - File validation feedback (before upload)
-- Upload progress indicators (per file)
+- Loading spinner during upload
 - Success/error toasts
 - Preview thumbnails after upload
 
@@ -745,20 +962,70 @@ Check browser DevTools → Network → WS tab to verify WebSocket connection.
 - **Three-dots menu** (top-right) on each photo card for actions:
   - Photo ID display (6-character short ID)
   - Download options (Original/Thumbnail with quality selection)
-  - Delete action
+  - Rename photo
+  - Share link
+  - Delete action (moves to trash)
+- **Heart icon** for favoriting photos (before three-dots menu)
 - Photo name displayed at bottom of card
 - Filter by status positioned on right side of heading
-- Pagination controls at top (Previous/Next)
-- **Multi-select mode** with bulk delete:
+- View toggle (Grid/List) with styled dropdown
+- Pagination controls at bottom (Previous/Next with purple theme)
+- **Multi-select mode** with bulk operations:
   - Select Photos button to enter selection mode
   - Checkboxes on photos when in selection mode
-  - Select All / Deselect All
-  - Bulk delete selected photos
+  - Select All / Deselect All (per-page selection)
+  - Bulk delete selected photos (moves to trash)
+  - Bulk download selected photos
 - Click photo to view full details page
-- Status badges on each thumbnail (bottom-right)
+- **Status badges** on each thumbnail (bottom-right, half card width):
+  - Shows full status word with smaller text
+  - Color-coded by status
+  - Compact design with icon
+- **Dynamic dropdown positioning**: Three-dots menu opens on right by default, moves to left if insufficient space
+- **Empty state**: Styled card with icon, title, and description
 - Scroll to top on pagination
 
-### 4. Event Log Viewer Screen
+### 4. Favorites Screen
+- Similar layout to Review Photos screen
+- Displays only photos marked as favorites
+- Filter by status dropdown
+- View toggle (Grid/List)
+- All standard photo actions available (rename, download, delete, etc.)
+- Heart icon shows filled state for favorites
+- **Empty state**: Styled card with heart icon, "No favorite photos yet" message
+- Pagination controls with purple theme
+
+### 5. Trash Screen
+- Displays all deleted photos (soft delete)
+- Similar layout to Review Photos screen
+- Filter by status dropdown
+- View toggle (Grid/List)
+- **Trash-specific actions**:
+  - Restore photo (single or bulk)
+  - Permanently delete photo (single or bulk, cannot be undone)
+  - Rename (allowed in trash)
+- Three-dots menu shows only Restore and Permanently Delete options
+- Bulk action buttons: Restore Selected and Permanently Delete Selected
+- Bulk action buttons disabled when no photos selected
+- **Empty state**: Styled card with trash icon, "Trash is empty" message
+- Pagination controls with purple theme
+
+### 6. Photo Detail Screen
+- Full-screen photo view with metadata
+- **Left section**: Large photo display with fullscreen preview
+- **Right section**: Photo information and event timeline
+- **Fullscreen modal**:
+  - Renders using React Portal to prevent re-render issues
+  - Full viewport coverage with dark background
+  - Image centered and scaled to fit viewport
+  - Bottom info bar with photo name and metadata (compact design)
+  - Click outside image to close
+- Event timeline shows all events chronologically
+- Status badge display
+- Download options
+- Navigation back to gallery
+
+### 7. Event Log Viewer Screen
 - Timeline view of all events
 - Filters positioned on right side of heading:
   - Photo ID input (supports UUID or 6-character short ID)
@@ -799,8 +1066,10 @@ All errors follow consistent format:
 - **Toast Notifications**: Show error messages to user
 - **Retry Logic**: Automatic retry for transient errors (network, 5xx)
 - **Error Boundaries**: React error boundaries for component-level errors
-- **Loading States**: Show spinners during operations
+- **Loading States**: Show spinners during operations (purple-themed spinners)
 - **Offline Detection**: Detect network issues and show message
+- **Empty States**: Styled empty state cards with icons and descriptive messages
+- **Optimistic Locking**: Handled gracefully with retry logic for concurrent updates
 
 ### Validation Rules
 
@@ -830,6 +1099,12 @@ All errors follow consistent format:
 - Batch operations (delete multiple, reprocess) (✅ Bulk delete implemented)
 - Short photo IDs (✅ 6-character IDs implemented)
 - Multi-select and bulk operations (✅ Implemented)
+- Trash and soft delete functionality (✅ Implemented)
+- Favorites feature (✅ Implemented)
+- Photo renaming (✅ Implemented)
+- Photo detail page with fullscreen preview (✅ Implemented)
+- Dynamic dropdown positioning (✅ Implemented)
+- Consistent UI theme across all components (✅ Implemented)
 - Photo metadata editing (title, description, tags)
 - Advanced filtering and search
 - Export event logs to CSV/JSON
@@ -973,6 +1248,8 @@ CREATE TABLE photo (
     storage_path VARCHAR(500),
     thumbnail_path VARCHAR(500),
     metadata JSONB,
+    favorite BOOLEAN DEFAULT FALSE,  -- Favorite flag
+    deleted_at TIMESTAMP,  -- Soft delete timestamp (NULL = not deleted)
     uploaded_at TIMESTAMP NOT NULL,
     processed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
@@ -982,6 +1259,8 @@ CREATE TABLE photo (
 CREATE INDEX idx_photo_status ON photo(status);
 CREATE INDEX idx_photo_uploaded_at ON photo(uploaded_at DESC);
 CREATE INDEX idx_photo_short_id ON photo(short_id);
+CREATE INDEX idx_photo_favorite ON photo(favorite) WHERE favorite = TRUE;
+CREATE INDEX idx_photo_deleted_at ON photo(deleted_at);
 ```
 
 ### Event Log Table

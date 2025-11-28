@@ -22,7 +22,8 @@ import java.util.UUID;
     @Index(name = "idx_photo_status", columnList = "status"),
     @Index(name = "idx_photo_uploaded_at", columnList = "uploaded_at"),
     @Index(name = "idx_photo_short_id", columnList = "short_id"),
-    @Index(name = "idx_photo_favorite", columnList = "is_favorite")
+    @Index(name = "idx_photo_favorite", columnList = "is_favorite"),
+    @Index(name = "idx_photo_deleted_at", columnList = "deleted_at")
 })
 @Data
 @Builder
@@ -110,6 +111,13 @@ public class Photo {
     @Column(name = "is_favorite", nullable = false)
     @Builder.Default
     private Boolean isFavorite = false;
+    
+    /**
+     * Timestamp when photo was deleted (soft delete)
+     * Null means photo is not deleted
+     */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
     
     /**
      * Timestamp when record was created (auto-managed)

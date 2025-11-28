@@ -286,7 +286,7 @@ public class PhotoController {
     }
     
     /**
-     * Delete multiple photos
+     * Delete multiple photos (soft delete - move to trash)
      * POST /api/photos/bulk-delete
      */
     @PostMapping("/bulk-delete")
@@ -295,6 +295,79 @@ public class PhotoController {
             return ResponseEntity.badRequest().build();
         }
         photoService.deletePhotos(ids);
+        return ResponseEntity.noContent().build();
+    }
+    
+    /**
+     * Get photos in trash
+     * GET /api/photos/trash?page=0&size=25&sort=deletedAt,desc
+     */
+    @GetMapping("/trash")
+    public ResponseEntity<Page<PhotoResponse>> getTrashPhotos(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            @RequestParam(defaultValue = "deletedAt,desc") String sort) {
+        
+        String[] sortParams = sort.split(",");
+        Sort.Direction direction = sortParams.length > 1 && "desc".equalsIgnoreCase(sortParams[1]) 
+                ? Sort.Direction.DESC 
+                : Sort.Direction.ASC;
+        Sort sortObj = Sort.by(direction, sortParams[0]);
+        
+        Pageable pageable = PageRequest.of(page, size, sortObj);
+        Page<Photo> photos = photoService.getTrashPhotos(pageable);
+        
+        Page<PhotoResponse> responses = photos.map(photo -> 
+                PhotoResponse.fromEntity(photo, storageService.getBaseUrl())
+        );
+        
+        return ResponseEntity.ok(responses);
+    }
+    
+    /**
+     * Restore photo from trash
+     * POST /api/photos/{id}/restore
+     */
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<PhotoResponse> restorePhoto(@PathVariable UUID id) {
+        Photo photo = photoService.restorePhoto(id);
+        PhotoResponse response = PhotoResponse.fromEntity(photo, storageService.getBaseUrl());
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Restore multiple photos from trash
+     * POST /api/photos/bulk-restore
+     */
+    @PostMapping("/bulk-restore")
+    public ResponseEntity<Void> restorePhotos(@RequestBody List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        photoService.restorePhotos(ids);
+        return ResponseEntity.noContent().build();
+    }
+    
+    /**
+     * Permanently delete photo from trash
+     * DELETE /api/photos/{id}/permanent
+     */
+    @DeleteMapping("/{id}/permanent")
+    public ResponseEntity<Void> permanentDeletePhoto(@PathVariable UUID id) {
+        photoService.permanentDeletePhoto(id);
+        return ResponseEntity.noContent().build();
+    }
+    
+    /**
+     * Permanently delete multiple photos from trash
+     * POST /api/photos/bulk-permanent-delete
+     */
+    @PostMapping("/bulk-permanent-delete")
+    public ResponseEntity<Void> permanentDeletePhotos(@RequestBody List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        photoService.permanentDeletePhotos(ids);
         return ResponseEntity.noContent().build();
     }
     

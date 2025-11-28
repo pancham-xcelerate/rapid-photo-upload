@@ -20,9 +20,12 @@ export function StatusBadge({ status, className = '' }) {
   const colorClass = statusColors[status] || 'bg-gray-100 text-gray-800';
   const icon = statusIcons[status] || '';
 
+  // Default to w-full for grid view, but allow override with className
+  const widthClass = className.includes('w-') ? '' : 'w-full';
+
   return (
     <span
-      className={`inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] leading-tight font-semibold shadow-sm border w-full ${colorClass} ${className}`}
+      className={`inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] leading-tight font-semibold shadow-sm border ${widthClass} ${colorClass} ${className}`}
     >
       <span className="flex-shrink-0 text-[9px]">{icon}</span>
       <span className="whitespace-nowrap">{status}</span>

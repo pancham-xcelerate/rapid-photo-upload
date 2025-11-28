@@ -353,13 +353,13 @@ public class PhotoService {
     }
     
     /**
-     * Get all photos with pagination and optional status filter
+     * Get all photos with pagination and optional status filter (excludes deleted photos)
      */
     public Page<Photo> getPhotos(PhotoStatus status, Pageable pageable) {
         if (status != null) {
-            return photoRepository.findByStatus(status, pageable);
+            return photoRepository.findByStatusAndNotDeleted(status, pageable);
         }
-        return photoRepository.findAll(pageable);
+        return photoRepository.findAllNotDeleted(pageable);
     }
     
     /**
@@ -402,13 +402,13 @@ public class PhotoService {
     }
     
     /**
-     * Get favorite photos with optional status filter
+     * Get favorite photos with optional status filter (excludes deleted photos)
      */
     public Page<Photo> getFavoritePhotos(PhotoStatus status, Pageable pageable) {
         if (status != null) {
-            return photoRepository.findByIsFavoriteTrueAndStatus(status, pageable);
+            return photoRepository.findFavoritePhotosNotDeletedAndStatus(status, pageable);
         }
-        return photoRepository.findByIsFavoriteTrue(pageable);
+        return photoRepository.findFavoritePhotosNotDeleted(pageable);
     }
     
     /**
@@ -436,11 +436,10 @@ public class PhotoService {
     }
     
     /**
-     * Delete photo
+     * Soft delete photo (move to trash)
      */
     @Transactional
     public void deletePhoto(UUID id) {
-        // Get photo info before deletion (for MinIO cleanup)
         Photo photo = null;
         try {
             photo = getPhotoById(id);
@@ -449,46 +448,96 @@ public class PhotoService {
             return; // Photo doesn't exist, nothing to delete
         }
         
+        // Check if already deleted
+        if (photo.getDeletedAt() != null) {
+            log.warn("Photo already deleted: {}", id);
+            return;
+        }
+        
+        // Soft delete: set deletedAt timestamp
+        photo.setDeletedAt(TimeUtil.getCurrentTimestamp());
+        photoRepository.save(photo);
+        
+        // Create event log
+        eventLogService.createEvent(id, "DELETED", "Photo moved to trash");
+        
+        log.info("Moved photo to trash: {}", id);
+    }
+    
+    /**
+     * Restore photo from trash
+     */
+    @Transactional
+    public Photo restorePhoto(UUID id) {
+        Photo photo = getPhotoById(id);
+        
+        if (photo.getDeletedAt() == null) {
+            throw new IllegalArgumentException("Photo is not in trash");
+        }
+        
+        photo.setDeletedAt(null);
+        Photo restored = photoRepository.save(photo);
+        
+        // Create event log
+        eventLogService.createEvent(id, "RESTORED", "Photo restored from trash");
+        
+        log.info("Restored photo from trash: {}", id);
+        return restored;
+    }
+    
+    /**
+     * Permanently delete photo (hard delete from database and storage)
+     */
+    @Transactional
+    public void permanentDeletePhoto(UUID id) {
+        Photo photo = null;
+        try {
+            photo = getPhotoById(id);
+        } catch (Exception e) {
+            log.warn("Photo not found for permanent deletion: {}", id);
+            return;
+        }
+        
         String filename = photo.getFilename();
         String thumbnailPath = photo.getThumbnailPath();
         
         // Delete from database using deleteById to avoid optimistic locking issues
-        // This will cascade delete event logs
         try {
             photoRepository.deleteById(id);
         } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
-            // Photo was updated by another transaction (e.g., worker)
-            // Try to delete again with a fresh query
-            log.warn("Optimistic locking failure during delete, retrying with fresh query: {}", id);
+            log.warn("Optimistic locking failure during permanent delete, retrying: {}", id);
             try {
-                // Check if photo still exists
                 if (photoRepository.existsById(id)) {
-                    // Use native query to force delete (bypasses optimistic locking)
                     photoRepository.deleteById(id);
-                } else {
-                    log.info("Photo already deleted: {}", id);
                 }
             } catch (Exception retryException) {
-                // If still fails, log but don't throw - photo might have been deleted by worker
-                log.warn("Failed to delete photo after retry (may have been deleted by worker): {}", id, retryException);
+                log.error("Failed to permanently delete photo after retry: {}", id, retryException);
+                throw new RuntimeException("Failed to permanently delete photo", retryException);
             }
         }
         
-        // Delete from MinIO (after DB deletion to ensure consistency)
+        // Delete from MinIO storage (best effort)
         try {
             storageService.deletePhoto(filename);
             if (thumbnailPath != null) {
                 storageService.deleteThumbnail(filename);
             }
         } catch (Exception e) {
-            log.warn("Error deleting photo from storage (photo already deleted from DB): {}", id, e);
+            log.warn("Error deleting photo from storage: {}", id, e);
         }
         
-        log.info("Deleted photo: {}", id);
+        log.info("Permanently deleted photo: {}", id);
     }
     
     /**
-     * Delete multiple photos
+     * Get photos in trash (deleted photos)
+     */
+    public Page<Photo> getTrashPhotos(Pageable pageable) {
+        return photoRepository.findAllDeleted(pageable);
+    }
+    
+    /**
+     * Delete multiple photos (soft delete - move to trash)
      */
     @Transactional
     public void deletePhotos(List<UUID> ids) {
@@ -496,63 +545,65 @@ public class PhotoService {
             return;
         }
         
-        // Get photo info before deletion (for MinIO cleanup)
-        List<Photo> photos = photoRepository.findAllById(ids);
-        if (photos.isEmpty()) {
-            log.warn("No photos found for deletion: {}", ids);
-            return;
-        }
-        
-        // Store filenames before deletion
-        List<String> filenames = photos.stream()
-                .map(Photo::getFilename)
-                .toList();
-        List<String> thumbnailPaths = photos.stream()
-                .filter(p -> p.getThumbnailPath() != null)
-                .map(Photo::getThumbnailPath)
-                .toList();
-        
-        // Delete from database - delete individually to handle optimistic locking gracefully
         int deletedCount = 0;
         for (UUID id : ids) {
             try {
-                photoRepository.deleteById(id);
+                deletePhoto(id);
                 deletedCount++;
-            } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
-                // Photo was updated by another transaction (e.g., worker)
-                log.warn("Optimistic locking failure for photo {}, may have been updated by worker: {}", id, e.getMessage());
-                // Try once more
-                try {
-                    if (photoRepository.existsById(id)) {
-                        photoRepository.deleteById(id);
-                        deletedCount++;
-                    }
-                } catch (Exception retryException) {
-                    log.warn("Failed to delete photo after retry: {}", id, retryException);
-                }
             } catch (Exception e) {
-                log.warn("Error deleting photo: {}", id, e);
+                log.error("Error deleting photo in bulk operation: {}", id, e);
+                // Continue with other photos
             }
         }
         
-        // Delete from MinIO (after DB deletion)
-        for (String filename : filenames) {
+        log.info("Moved {} out of {} photos to trash", deletedCount, ids.size());
+    }
+    
+    /**
+     * Permanently delete multiple photos from trash
+     */
+    @Transactional
+    public void permanentDeletePhotos(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        
+        int deletedCount = 0;
+        for (UUID id : ids) {
             try {
-                storageService.deletePhoto(filename);
+                permanentDeletePhoto(id);
+                deletedCount++;
             } catch (Exception e) {
-                log.warn("Error deleting photo from storage: {}", filename, e);
+                log.error("Error permanently deleting photo: {}", id, e);
+                // Continue with other photos
             }
         }
         
-        for (String thumbnailPath : thumbnailPaths) {
+        log.info("Permanently deleted {} out of {} photos", deletedCount, ids.size());
+    }
+    
+    /**
+     * Restore multiple photos from trash
+     */
+    @Transactional
+    public void restorePhotos(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        
+        int restoredCount = 0;
+        for (UUID id : ids) {
             try {
-                storageService.deleteThumbnail(thumbnailPath);
+                restorePhoto(id);
+                restoredCount++;
             } catch (Exception e) {
-                log.warn("Error deleting thumbnail from storage: {}", thumbnailPath, e);
+                log.error("Error restoring photo: {}", id, e);
+                // Continue with other photos
             }
         }
         
-        log.info("Deleted {} out of {} photos", deletedCount, photos.size());
+        log.info("Restored {} out of {} photos from trash", restoredCount, ids.size());
     }
 }
+
 

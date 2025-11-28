@@ -138,47 +138,67 @@ export function ReviewPhotos() {
         </div>
       </div>
 
-      <PhotoGallery
-        photos={photos}
-        onPhotoClick={handlePhotoClick}
-        onDelete={handleDelete}
-        onBulkDelete={handleBulkDelete}
-        onFavoriteToggle={handleFavoriteToggle}
-        onRename={handleRename}
-        loading={loading}
-        viewType={viewType}
-      />
-
-      {/* Pagination Controls - Bottom of Page */}
-      {totalPages > 1 && (
-        <div className="mt-6 flex justify-end">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setPage((p) => Math.max(0, p - 1));
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              disabled={page === 0}
-              className="px-5 py-2.5 font-medium border-2 border-purple-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:border-purple-400 transition-all duration-200 shadow-sm hover:shadow-md disabled:hover:shadow-sm"
-            >
-              Previous
-            </button>
-            <span className="px-5 py-2.5 text-gray-700 font-semibold bg-gray-50 rounded-lg border border-gray-200">
-              Page {page + 1} of {totalPages}
-            </span>
-            <button
-              onClick={() => {
-                setPage((p) => Math.min(totalPages - 1, p + 1));
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              disabled={page >= totalPages - 1}
-              className="px-5 py-2.5 font-medium border-2 border-purple-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:border-purple-400 transition-all duration-200 shadow-sm hover:shadow-md disabled:hover:shadow-sm"
-            >
-              Next
-            </button>
-          </div>
+      {loading && photos.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-200 border-t-purple-600 shadow-lg mx-auto"></div>
+          <p className="text-gray-500 mt-4 text-lg">Loading photos...</p>
         </div>
+      ) : photos.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-xl border border-gray-100 p-16 text-center backdrop-blur-sm">
+          <svg className="w-20 h-20 text-gray-300 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <p className="text-gray-600 text-xl font-semibold">No photos found</p>
+          <p className="text-gray-400 text-base mt-2">
+            Upload photos to get started
+          </p>
+        </div>
+      ) : (
+        <>
+          <PhotoGallery
+            photos={photos}
+            onPhotoClick={handlePhotoClick}
+            onDelete={handleDelete}
+            onBulkDelete={handleBulkDelete}
+            onFavoriteToggle={handleFavoriteToggle}
+            onRename={handleRename}
+            loading={loading}
+            viewType={viewType}
+          />
+
+          {/* Pagination Controls - Bottom of Page */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex justify-end">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setPage((p) => Math.max(0, p - 1));
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  disabled={page === 0}
+                  className="px-5 py-2.5 font-medium border-2 border-purple-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:border-purple-400 transition-all duration-200 shadow-sm hover:shadow-md disabled:hover:shadow-sm"
+                >
+                  Previous
+                </button>
+                <span className="px-5 py-2.5 text-gray-700 font-semibold bg-gray-50 rounded-lg border border-gray-200">
+                  Page {page + 1} of {totalPages}
+                </span>
+                <button
+                  onClick={() => {
+                    setPage((p) => Math.min(totalPages - 1, p + 1));
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  disabled={page >= totalPages - 1}
+                  className="px-5 py-2.5 font-medium border-2 border-purple-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:border-purple-400 transition-all duration-200 shadow-sm hover:shadow-md disabled:hover:shadow-sm"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
+
 
       <ErrorToast error={error} onClose={() => setError(null)} />
     </div>
